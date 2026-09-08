@@ -2,7 +2,7 @@
 const Products = {
   data: [],
   expanded: new Set(),
-  cargoTypes: ["普货", "带电", "敏感货", "特货"],
+  cargoTypes: ["普货", "带电", "敏货", "特货"],
 
   renderToolbar(toolbar) {
     toolbar.innerHTML = `<button class="btn btn-primary" id="btn-add-product">新增产品</button>`;

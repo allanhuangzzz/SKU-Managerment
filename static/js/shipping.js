@@ -2,7 +2,7 @@
 const Shipping = {
   data: [],
   countries: [],
-  cargoTypes: ["普货", "带电", "敏感货", "特货"],
+  cargoTypes: ["普货", "带电", "敏货", "特货"],
   expanded: new Set(),
 
   existingChannels() {
