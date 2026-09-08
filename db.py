@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS products (
     height            REAL DEFAULT 0,
     purchase_price    REAL NOT NULL DEFAULT 0,
     domestic_shipping REAL NOT NULL DEFAULT 0,
+    agent_fee         REAL NOT NULL DEFAULT 0,
     weight            REAL NOT NULL DEFAULT 0,
     remark            TEXT DEFAULT '',
     created_at        TEXT DEFAULT (datetime('now','localtime')),
@@ -127,7 +128,7 @@ def init_db():
             SEED_COUNTRIES,
         )
     # 迁移：旧表加新列
-    for col, typ in (("cargo_type", "TEXT DEFAULT '普货'"), ("length", "REAL DEFAULT 0"), ("width", "REAL DEFAULT 0"), ("height", "REAL DEFAULT 0"), ("image_path", "TEXT DEFAULT ''"), ("link", "TEXT DEFAULT ''")):
+    for col, typ in (("cargo_type", "TEXT DEFAULT '普货'"), ("length", "REAL DEFAULT 0"), ("width", "REAL DEFAULT 0"), ("height", "REAL DEFAULT 0"), ("image_path", "TEXT DEFAULT ''"), ("link", "TEXT DEFAULT ''"), ("agent_fee", "REAL NOT NULL DEFAULT 0")):
         try:
             conn.execute(f"ALTER TABLE products ADD COLUMN {col} {typ}")
         except sqlite3.OperationalError:

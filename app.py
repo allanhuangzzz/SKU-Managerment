@@ -148,8 +148,8 @@ def create_product():
     try:
         cur = dbconn.execute(
             """INSERT INTO products (sku, name, category, cargo_type, length, width, height,
-               purchase_price, domestic_shipping, weight, link, remark)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+               purchase_price, domestic_shipping, agent_fee, weight, link, remark)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 sku,
                 name,
@@ -160,6 +160,7 @@ def create_product():
                 _num(data.get("height")),
                 _num(data.get("purchase_price")),
                 _num(data.get("domestic_shipping")),
+                _num(data.get("agent_fee")),
                 _num(data.get("weight")),
                 (data.get("link") or "").strip(),
                 (data.get("remark") or "").strip(),
@@ -184,7 +185,7 @@ def update_product(pid):
     try:
         dbconn.execute(
             """UPDATE products SET sku=?, name=?, category=?, cargo_type=?, length=?, width=?, height=?,
-               purchase_price=?, domestic_shipping=?, weight=?, link=?, remark=?, updated_at=? WHERE id=?""",
+               purchase_price=?, domestic_shipping=?, agent_fee=?, weight=?, link=?, remark=?, updated_at=? WHERE id=?""",
             (
                 sku,
                 name,
@@ -195,6 +196,7 @@ def update_product(pid):
                 _num(data.get("height")),
                 _num(data.get("purchase_price")),
                 _num(data.get("domestic_shipping")),
+                _num(data.get("agent_fee")),
                 _num(data.get("weight")),
                 (data.get("link") or "").strip(),
                 (data.get("remark") or "").strip(),
@@ -281,6 +283,7 @@ def product_shipping(pid):
     cargo_type = product["cargo_type"] if "cargo_type" in product.keys() else "普货"
     purchase_price = _num(product["purchase_price"])
     domestic_shipping = _num(product["domestic_shipping"])
+    agent_fee = _num(product["agent_fee"])
 
     # 查询匹配该产品货物类型的运费规则
     rules = dbconn.execute(
@@ -310,7 +313,7 @@ def product_shipping(pid):
         cost_cny = round(cost_original * rate, 2) if rate is not None else None
         comm_rate = (commissions.get(rule["country_id"]) or 0) / 100.0
         if cost_cny is not None:
-            break_even = round((purchase_price + domestic_shipping + cost_cny) / (1 - comm_rate), 2) if comm_rate < 1 else 0
+            break_even = round((purchase_price + domestic_shipping + agent_fee + cost_cny) / (1 - comm_rate), 2) if comm_rate < 1 else 0
             break_even_local = round(break_even / rate, 2) if rate and rate > 0 else None
             platform_commission = round(break_even * comm_rate, 2)
         else:
@@ -718,11 +721,13 @@ def _startup_refresh():
 if __name__ == "__main__":
     db.init_db()
     threading.Timer(2.0, _startup_refresh).start()
-    port = 5000
-    print(f"\n产品SKU管理系统已启动： http://127.0.0.1:{port}\n")
+    # 默认监听本机 5000；Docker/NAS 部署可用环境变量 HOST/PORT 覆盖（如 0.0.0.0:5050）
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "5000"))
+    print(f"\n产品SKU管理系统已启动： http://{host}:{port}\n")
     try:
         import webbrowser
         threading.Timer(1.2, lambda: webbrowser.open(f"http://127.0.0.1:{port}"))
     except Exception:
         pass
-    app.run(host="127.0.0.1", port=port, debug=False, threaded=True)
+    app.run(host=host, port=port, debug=False, threaded=True)

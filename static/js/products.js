@@ -12,12 +12,12 @@ const Products = {
   async load() {
     ensureFreshRates();
     const tbody = $("#product-tbody");
-    tbody.innerHTML = `<tr><td colspan="9"><div class="loading"><span class="spinner"></span>加载中...</div></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10"><div class="loading"><span class="spinner"></span>加载中...</div></tr>`;
     try {
       this.data = await api("/api/products");
       this.render();
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="9" class="empty-cell">加载失败：${esc(e.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" class="empty-cell">加载失败：${esc(e.message)}</td></tr>`;
     }
   },
 
@@ -28,7 +28,7 @@ const Products = {
       !kw || [p.sku, p.name].some((v) => String(v || "").toLowerCase().includes(kw))
     );
     if (!list.length) {
-      tbody.innerHTML = `<tr><td colspan="9" class="empty-cell">${
+      tbody.innerHTML = `<tr><td colspan="10" class="empty-cell">${
         kw ? "未找到匹配的产品" : "暂无产品，点击右上角「新增产品」开始录入"
       }</td></tr>`;
       return;
@@ -46,6 +46,7 @@ const Products = {
         <td>${dimText}</td>
         <td class="num">${fmtMoney(p.purchase_price)}</td>
         <td class="num">${fmtMoney(p.domestic_shipping)}</td>
+        <td class="num">${fmtMoney(p.agent_fee)}</td>
         <td class="num">${fmtNum(p.weight)}</td>
         <td class="op">
           <button class="link-btn" data-edit="${p.id}">编辑</button>
@@ -53,7 +54,7 @@ const Products = {
         </td>
       </tr>
       <tr class="detail-row" data-detail="${p.id}" style="display:none">
-        <td colspan="9"><div class="detail-box" data-box="${p.id}"></div></td>
+        <td colspan="10"><div class="detail-box" data-box="${p.id}"></div></td>
       </tr>`}).join("");
 
     tbody.querySelectorAll(".product-row").forEach((tr) =>
@@ -365,6 +366,8 @@ const Products = {
           <input class="input" type="number" step="0.01" min="0" id="p-price" value="${p ? p.purchase_price : ""}" placeholder="0.00"></div>
         <div class="form-item"><label>国内运费（¥）</label>
           <input class="input" type="number" step="0.01" min="0" id="p-dom" value="${p ? p.domestic_shipping : ""}" placeholder="0.00"></div>
+        <div class="form-item"><label>货代处理费（¥）</label>
+          <input class="input" type="number" step="0.01" min="0" id="p-agent" value="${p ? (p.agent_fee ?? 0) : ""}" placeholder="0.00"></div>
         <div class="form-item full"><label>产品图片</label>
           <div class="img-upload-zone" id="p-image-zone">
             <input type="file" id="p-image" accept="image/*" hidden>
@@ -457,6 +460,7 @@ const Products = {
         weight: $("#p-weight").value,
         purchase_price: $("#p-price").value,
         domestic_shipping: $("#p-dom").value,
+        agent_fee: $("#p-agent").value,
         link: $("#p-link").value.trim(),
         remark: $("#p-remark").value.trim(),
       };
