@@ -18,6 +18,10 @@ jobs:
     permissions:
       contents: read
       packages: write        # 允许推送到 GHCR
+    # secrets 不能直接在 if 中引用，先放入 job 级 env 供步骤条件判断
+    env:
+      DHU: ${{ secrets.DOCKERHUB_USERNAME }}
+      DHT: ${{ secrets.DOCKERHUB_TOKEN }}
 
     steps:
       - name: 检出代码
@@ -44,19 +48,19 @@ jobs:
       # 可选：同时推送到 Docker Hub（NAS 映像页能提示更新的前提）。
       # 未在仓库 Secrets 配置 DOCKERHUB_USERNAME/DOCKERHUB_TOKEN 时此步自动跳过，不影响 GHCR 构建。
       - name: 登录 Docker Hub
-        if: secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != ''
+        if: env.DHU != '' && env.DHT != ''
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ env.DHU }}
+          password: ${{ env.DHT }}
 
       - name: 推送 Docker Hub
-        if: secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != ''
+        if: env.DHU != '' && env.DHT != ''
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./deploy_nas/Dockerfile
           push: true
           tags: |
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            docker.io/${{ env.DHU }}/${{ env.IMAGE_NAME }}:latest
+            docker.io/${{ env.DHU }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
