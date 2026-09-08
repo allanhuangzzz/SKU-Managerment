@@ -3,6 +3,10 @@
 __pycache__/
 *.pyc
 
+# 运行时日志
+*.log
+debug.log
+
 # 数据文件（数据库 + 上传产品图）不入库
 *.db
 static/uploads/
