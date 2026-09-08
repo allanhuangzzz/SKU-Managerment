@@ -1,0 +1,13 @@
+# 构建上下文排除项（仓库根 = 唯一代码源；数据/环境/文档不打进镜像）
+.venv/
+__pycache__/
+*.pyc
+*.db
+static/uploads/
+deploy_nas/data/
+.git/
+.github/
+nas-tools/
+*.md
+启动系统.bat
+launcher.py

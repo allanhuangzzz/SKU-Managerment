@@ -1,4 +1,5 @@
-# GitHub Actions: 推送代码到 master 后，自动构建 Docker 映像并推送到 GHCR
+# GitHub Actions: 推送代码到 master 后，自动构建 Docker 映像
+# 单源化：构建上下文 = 仓库根（代码只维护根一份）；推送到 GHCR（必推）与 Docker Hub（可选）
 # 生效后：本地 git push -> GitHub 自动出包 -> NAS 拉新映像即更新
 
 name: build-docker-image
@@ -29,12 +30,33 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}   # GitHub 自动提供的令牌，无需自己配置
 
-      - name: 构建并推送映像
+      # 主构建：推送到 GHCR（必推）
+      - name: 构建并推送 GHCR
         uses: docker/build-push-action@v6
         with:
-          context: ./deploy_nas           # 构建上下文 = deploy_nas（含 Dockerfile）
-          file: ./deploy_nas/Dockerfile
+          context: .                            # 仓库根 = 唯一代码源
+          file: ./deploy_nas/Dockerfile         # Dockerfile 位于 deploy_nas（COPY 相对根）
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
             ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      # 可选：同时推送到 Docker Hub（NAS 映像页能提示更新的前提）。
+      # 未在仓库 Secrets 配置 DOCKERHUB_USERNAME/DOCKERHUB_TOKEN 时此步自动跳过，不影响 GHCR 构建。
+      - name: 登录 Docker Hub
+        if: secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 推送 Docker Hub
+        if: secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != ''
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./deploy_nas/Dockerfile
+          push: true
+          tags: |
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
