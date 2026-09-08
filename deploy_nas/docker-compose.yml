@@ -1,11 +1,15 @@
-# 产品SKU管理系统 - Docker Compose（群晖 Container Manager 可直接用）
-# 用法：把整个 deploy_nas 目录上传到 NAS 某路径，在该目录下执行 docker compose up -d
+# 产品SKU管理系统 - Docker Compose（镜像流模式）
+# 代码由 GitHub Actions 自动构建成镜像并推送到 GHCR；
+# 本文件只负责：拉取最新镜像 + 挂载 NAS 本地数据，不再本地构建。
+#
+# 用法：Container Manager 新增项目，路径选本目录（含 data/ 子目录与 data 数据）
 # 数据持久化：宿主机 ./data 目录（sku.db 数据库 + uploads 产品图），重建容器不丢数据
+# 更新方式：GitHub 代码有更新后，Container Manager 映像标签会出现"可用更新"，
+#           点更新（或 docker compose pull && up -d）即拉取新镜像重启
 
 services:
   sku:
-    build: .
-    image: sku-manager:latest
+    image: ghcr.io/allanhuangzzz/sku-managerment:latest
     container_name: sku-manager
     restart: always            # NAS 重启 / 容器异常退出后自动拉起
     ports:
@@ -16,11 +20,3 @@ services:
     volumes:
       - ./data/sku.db:/app/sku.db              # 数据库持久化（文件级挂载）
       - ./data/uploads:/app/static/uploads     # 产品图片持久化（目录级挂载）
-      # ===== 代码直挂（bind mount）：以下代码文件实时从宿主机读取 =====
-      # 以后更新代码：覆盖宿主机文件 -> 重启容器即可，无需重新构建镜像
-      - ./app.py:/app/app.py
-      - ./db.py:/app/db.py
-      - ./import_shipping.py:/app/import_shipping.py
-      - ./templates:/app/templates
-      - ./static/css:/app/static/css
-      - ./static/js:/app/static/js
