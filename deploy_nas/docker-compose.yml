@@ -1,5 +1,5 @@
 # 产品SKU管理系统 - Docker Compose（镜像流模式）
-# 代码由 GitHub Actions 自动构建成镜像并推送到 GHCR；
+# 代码由 GitHub Actions 自动构建并推送到 GHCR 与 Docker Hub；
 # 本文件只负责：拉取最新镜像 + 挂载 NAS 本地数据，不再本地构建。
 #
 # 用法：Container Manager 新增项目，路径选本目录（含 data/ 子目录与 data 数据）
@@ -9,7 +9,7 @@
 
 services:
   sku:
-    image: ghcr.io/allanhuangzzz/sku-managerment:latest
+    image: docker.io/allanhuangzzz/sku-managerment:latest
     container_name: sku-manager
     restart: always            # NAS 重启 / 容器异常退出后自动拉起
     ports:
