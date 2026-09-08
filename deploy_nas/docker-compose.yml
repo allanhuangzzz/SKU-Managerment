@@ -1,0 +1,26 @@
+# 产品SKU管理系统 - Docker Compose（群晖 Container Manager 可直接用）
+# 用法：把整个 deploy_nas 目录上传到 NAS 某路径，在该目录下执行 docker compose up -d
+# 数据持久化：宿主机 ./data 目录（sku.db 数据库 + uploads 产品图），重建容器不丢数据
+
+services:
+  sku:
+    build: .
+    image: sku-manager:latest
+    container_name: sku-manager
+    restart: always            # NAS 重启 / 容器异常退出后自动拉起
+    ports:
+      - "5050:5050"            # 宿主机端口:容器端口；想换访问端口改左边即可
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "5050"
+    volumes:
+      - ./data/sku.db:/app/sku.db              # 数据库持久化（文件级挂载）
+      - ./data/uploads:/app/static/uploads     # 产品图片持久化（目录级挂载）
+      # ===== 代码直挂（bind mount）：以下代码文件实时从宿主机读取 =====
+      # 以后更新代码：覆盖宿主机文件 -> 重启容器即可，无需重新构建镜像
+      - ./app.py:/app/app.py
+      - ./db.py:/app/db.py
+      - ./import_shipping.py:/app/import_shipping.py
+      - ./templates:/app/templates
+      - ./static/css:/app/static/css
+      - ./static/js:/app/static/js

@@ -1,0 +1,8 @@
+# 构建上下文排除项（数据与静态上传由宿主机 data/ 挂载，不打进镜像）
+data/
+static/uploads/
+__pycache__/
+*.pyc
+.venv/
+.git/
+*.md
