@@ -304,9 +304,11 @@ def product_shipping(pid):
 
     items = []
     for rule in rules:
+        # 档位区间采用左闭右开 [weight_min, weight_max)，
+        # 相邻档（如 0.3/0.5/1/2kg）在交界处不重叠，避免同一产品命中多档重复展示
         if weight < rule["weight_min"]:
             continue
-        if rule["weight_max"] is not None and weight > rule["weight_max"]:
+        if rule["weight_max"] is not None and weight >= rule["weight_max"]:
             continue
         cost_original = rule["per_parcel"] + rule["per_kg"] * weight
         rate = rates.get(rule["currency"])
