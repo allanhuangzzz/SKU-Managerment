@@ -88,7 +88,7 @@ function esc(s) {
 }
 
 /* ---------- 视图切换 ---------- */
-const views = { products: "产品信息", shipping: "运费维护", commissions: "佣金维护", rates: "汇率维护" };
+const views = { products: "产品信息", shipping: "运费维护", commissions: "佣金维护", taxes: "税费维护", rates: "汇率维护" };
 let currentView = "products";
 
 function switchView(name) {
@@ -102,10 +102,12 @@ function switchView(name) {
   if (name === "products") Products.renderToolbar(toolbar);
   else if (name === "shipping") Shipping.renderToolbar(toolbar);
   else if (name === "commissions") Commissions.renderToolbar(toolbar);
+  else if (name === "taxes") Taxes.renderToolbar(toolbar);
   else if (name === "rates") Rates.renderToolbar(toolbar);
   if (name === "products") Products.load();
   else if (name === "shipping") Shipping.load();
   else if (name === "commissions") Commissions.load();
+  else if (name === "taxes") Taxes.load();
   else if (name === "rates") Rates.load();
 }
 

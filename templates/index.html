@@ -13,6 +13,7 @@
       <a class="nav-item active" data-view="products">产品信息</a>
       <a class="nav-item" data-view="shipping">运费维护</a>
       <a class="nav-item" data-view="commissions">佣金维护</a>
+      <a class="nav-item" data-view="taxes">税费维护</a>
       <a class="nav-item" data-view="rates">汇率维护</a>
     </nav>
     <div class="sidebar-foot">v1.0</div>
@@ -96,6 +97,25 @@
       </div>
     </section>
 
+    <section class="view" id="view-taxes">
+      <div class="card">
+        <div class="table-wrap">
+          <table class="table" id="tax-table">
+            <thead>
+              <tr>
+                <th>国家</th>
+                <th>国家代码</th>
+                <th class="num">税率（%）</th>
+                <th class="num">附加费（€）</th>
+                <th class="op">操作</th>
+              </tr>
+            </thead>
+            <tbody id="tax-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <section class="view" id="view-rates">
       <div class="card" style="margin-bottom:14px">
         <div class="rates-tip" id="rates-tip">汇率数据未刷新，点击右上角「刷新实时汇率」从公开接口获取最新汇率。</div>
@@ -131,6 +151,7 @@
   <script src="/static/js/products.js"></script>
   <script src="/static/js/shipping.js"></script>
   <script src="/static/js/commissions.js"></script>
+  <script src="/static/js/taxes.js"></script>
   <script src="/static/js/rates.js"></script>
 </body>
 </html>

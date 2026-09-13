@@ -202,7 +202,7 @@ select.input { cursor: pointer; appearance: auto; }
 .ext-link:hover { opacity: 1; }
 
 /* 产品国外运费展开区 */
-.detail-box { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.detail-box { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; }
 .detail-box h4 { font-size: 13px; color: var(--text-secondary); font-weight: 600; margin-bottom: 10px; }
 .detail-table { width: 100%; border-collapse: collapse; }
 .detail-table th {
@@ -222,29 +222,32 @@ select.input { cursor: pointer; appearance: auto; }
 }
 .money-sym { width: 16px; text-align: left; flex: none; color: inherit; }
 .money-neutral .money-sym { color: var(--text-secondary); }
-.money-val { min-width: 62px; text-align: right; }
+.money-val { min-width: 60px; text-align: right; }
 .money-cell b, b .money-cell { font-weight: 600; }
-.detail-table.compact { table-layout: fixed; }
-.detail-table.compact th { padding: 6px 8px; font-size: 12px; }
-.detail-table.compact td { padding: 6px 8px; font-size: 13px; }
+.detail-table.compact { table-layout: fixed; min-width: 1200px; }
+.detail-table.compact th { padding: 6px 8px; font-size: 12px; white-space: nowrap; }
+.detail-table.compact td { padding: 6px 8px; font-size: 13px; white-space: nowrap; }
+/* 10 列宽度比例（合计 100%）：国家/售价/预估收益/收益RMB/盈亏平衡/国外运费/国外运费RMB/税费/平台佣金/佣金率 */
 .detail-table.compact th:first-child,
-.detail-table.compact td:first-child { width: 16%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.detail-table.compact td:first-child { width: 16%; white-space: normal; line-height: 1.35; word-break: break-word; }
 .detail-table.compact th:nth-child(2),
-.detail-table.compact td:nth-child(2) { width: 12%; }
+.detail-table.compact td:nth-child(2) { width: 10%; }
 .detail-table.compact th:nth-child(3),
-.detail-table.compact td:nth-child(3) { width: 9%; }
+.detail-table.compact td:nth-child(3) { width: 10%; }
 .detail-table.compact th:nth-child(4),
-.detail-table.compact td:nth-child(4) { width: 12%; }
+.detail-table.compact td:nth-child(4) { width: 11%; }
 .detail-table.compact th:nth-child(5),
-.detail-table.compact td:nth-child(5) { width: 12%; }
+.detail-table.compact td:nth-child(5) { width: 11%; }
 .detail-table.compact th:nth-child(6),
-.detail-table.compact td:nth-child(6) { width: 11%; }
+.detail-table.compact td:nth-child(6) { width: 10%; }
 .detail-table.compact th:nth-child(7),
-.detail-table.compact td:nth-child(7) { width: 12%; }
+.detail-table.compact td:nth-child(7) { width: 11%; }
 .detail-table.compact th:nth-child(8),
-.detail-table.compact td:nth-child(8) { width: 9%; }
+.detail-table.compact td:nth-child(8) { width: 8%; }
 .detail-table.compact th:nth-child(9),
-.detail-table.compact td:nth-child(9) { width: 7%; }
+.detail-table.compact td:nth-child(9) { width: 9%; }
+.detail-table.compact th:nth-child(10),
+.detail-table.compact td:nth-child(10) { width: 4%; }
 .detail-table.compact tr.country-group td { padding-top: 14px; border-top: 1px solid #dce3ec; }
 /* 售价输入：货币符号 + 输入框，居中；宽度容纳四位整数 + 两位小数 */
 .price-input-wrap {

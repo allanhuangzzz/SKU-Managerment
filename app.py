@@ -302,6 +302,11 @@ def product_shipping(pid):
     commissions = {row["country_id"]: row["rate"]
                    for row in dbconn.execute("SELECT country_id, rate FROM commission_rates")}
 
+    # 税费（按国家：税率% + 附加费固定金额欧元）
+    taxes = {row["country_id"]: (row["rate"], row["fee"])
+             for row in dbconn.execute("SELECT country_id, rate, fee FROM tax_rates")}
+    eur_rate = rates.get("EUR")
+
     items = []
     for rule in rules:
         # 档位区间采用左闭右开 [weight_min, weight_max)，
@@ -314,14 +319,33 @@ def product_shipping(pid):
         rate = rates.get(rule["currency"])
         cost_cny = round(cost_original * rate, 2) if rate is not None else None
         comm_rate = (commissions.get(rule["country_id"]) or 0) / 100.0
-        if cost_cny is not None:
-            break_even = round((purchase_price + domestic_shipping + agent_fee + cost_cny) / (1 - comm_rate), 2) if comm_rate < 1 else 0
-            break_even_local = round(break_even / rate, 2) if rate and rate > 0 else None
-            platform_commission = round(break_even * comm_rate, 2)
+        # 税费（按国家：税率% + 附加费固定金额欧元）
+        tax_rate_pct, tax_fee_eur = taxes.get(rule["country_id"], (0, 0))
+        tax_rate = (tax_rate_pct or 0) / 100.0
+        # 附加费（欧元）先折人民币、再折当地币
+        tax_fee_cny = round((tax_fee_eur or 0) * eur_rate, 2) if eur_rate else 0
+        tax_fee_local = round(tax_fee_cny / rate, 2) if (rate and rate > 0) else 0
+        # 计税比例：售价含税，税额 = 售价 − 售价 ÷ (1 + 税率)，即 售价 × 税率/(1+税率)
+        eff_tax_rate = tax_rate / (1 + tax_rate)
+        denom = 1 - comm_rate - eff_tax_rate
+        # 统一以【当地币】计算，人民币仅在最后一步由当地币 × 汇率折算（供 RMB 展示）：
+        #   当地币成本 = (进货价 + 国内运费 + 货代费) ÷ 汇率 + 国外运费(当地币)
+        #   盈亏平衡售价(当地币) = (当地币成本 + 附加费(当地币)) / (1 - 佣金率 - 税率/(1+税率))
+        #   平台佣金(当地币) = 盈亏平衡售价(当地币) × 佣金率
+        #   税费(当地币)     = 盈亏平衡售价(当地币) − 盈亏平衡售价(当地币) ÷ (1 + 税率) + 附加费(当地币)
+        if cost_cny is not None and rate and rate > 0 and denom > 0:
+            base_local = (purchase_price + domestic_shipping + agent_fee) / rate + cost_original
+            break_even_local = round((base_local + tax_fee_local) / denom, 2)
+            break_even = round(break_even_local * rate, 2)
+            platform_commission = round(break_even_local * comm_rate, 2)
+            platform_tax = round(
+                break_even_local - break_even_local / (1 + tax_rate) + tax_fee_local, 2
+            )
         else:
             break_even = None
             break_even_local = None
             platform_commission = None
+            platform_tax = None
         items.append({
             "country_id": rule["country_id"],
             "country_name": rule["country_name"],
@@ -336,9 +360,14 @@ def product_shipping(pid):
             "rate": rate,
             "cost_cny": cost_cny,
             "commission_rate": comm_rate * 100,
+            "tax_rate": tax_rate * 100,
+            "tax_fee": tax_fee_eur,
+            "tax_fee_cny": tax_fee_cny,
+            "tax_fee_local": tax_fee_local,
             "break_even_selling_price": break_even,
             "break_even_local": break_even_local,
             "platform_commission": platform_commission,
+            "platform_tax": platform_tax,
         })
     # 补充售价与预估收益
     sp_rows = dbconn.execute(
@@ -352,11 +381,17 @@ def product_shipping(pid):
         rate = item["rate"]
         comm_rate = item["commission_rate"] / 100.0
         if item["selling_price"] and item["break_even_local"] is not None:
-            # 预估收益（当地货币）与其人民币折算
+            # 预估收益（当地货币）；RMB 仅用于展示，最后一步由当地币 × 汇率折算
             item["estimated_profit"] = round(item["selling_price"] - item["break_even_local"], 2)
             item["estimated_profit_rmb"] = round(item["estimated_profit"] * rate, 2) if rate else None
-            # 有售价时，平台佣金按当前售价（人民币）计算
-            item["platform_commission"] = round(item["selling_price"] * rate * comm_rate, 2) if rate else None
+            # 有售价时，平台佣金按当前售价（当地币）计算：售价 × 佣金率
+            item["platform_commission"] = round(item["selling_price"] * comm_rate, 2)
+            # 有售价时，税费按当前售价（当地币）计算：售价 − 售价 ÷ (1 + 税率) + 附加费（当地币）
+            item["platform_tax"] = round(
+                item["selling_price"]
+                - item["selling_price"] / (1 + item["tax_rate"] / 100.0)
+                + item["tax_fee_local"], 2
+            )
         else:
             item["estimated_profit"] = None
             item["estimated_profit_rmb"] = None
@@ -702,6 +737,39 @@ def update_commission(cid):
     if row is None:
         return jsonify({"ok": False, "message": "该国家佣金记录不存在"}), 404
     dbconn.execute("UPDATE commission_rates SET rate=? WHERE country_id=?", (rate, cid))
+    dbconn.commit()
+    return jsonify({"ok": True})
+
+
+# ---------- 税费维护 ----------
+
+@app.get("/api/taxes")
+def list_taxes():
+    rows = db.get_db().execute(
+        """SELECT t.id, t.country_id, t.rate, t.fee, c.name AS country_name, c.code AS country_code
+           FROM tax_rates t JOIN countries c ON c.id = t.country_id
+           ORDER BY c.sort_order, c.name"""
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.put("/api/taxes/<int:cid>")
+def update_tax(cid):
+    data = request.get_json(silent=True) or {}
+    rate = _num(data.get("rate"))
+    fee = _num(data.get("fee"))
+    if rate < 0 or rate >= 100:
+        return jsonify({"ok": False, "message": "税率必须在 0~100 之间"}), 400
+    if fee < 0:
+        return jsonify({"ok": False, "message": "附加费不能小于 0"}), 400
+    dbconn = db.get_db()
+    row = dbconn.execute("SELECT id FROM tax_rates WHERE country_id=?", (cid,)).fetchone()
+    if row is None:
+        if dbconn.execute("SELECT id FROM countries WHERE id=?", (cid,)).fetchone() is None:
+            return jsonify({"ok": False, "message": "该国家不存在"}), 404
+        dbconn.execute("INSERT INTO tax_rates (country_id, rate, fee) VALUES (?,?,?)", (cid, rate, fee))
+    else:
+        dbconn.execute("UPDATE tax_rates SET rate=?, fee=? WHERE country_id=?", (rate, fee, cid))
     dbconn.commit()
     return jsonify({"ok": True})
 

@@ -61,6 +61,13 @@ CREATE TABLE IF NOT EXISTS commission_rates (
     rate        REAL NOT NULL DEFAULT 13.0
 );
 
+CREATE TABLE IF NOT EXISTS tax_rates (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    country_id  INTEGER NOT NULL UNIQUE REFERENCES countries(id) ON DELETE CASCADE,
+    rate        REAL NOT NULL DEFAULT 0,
+    fee         REAL NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS product_selling_prices (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     product_id    INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -143,5 +150,10 @@ def init_db():
         for r in rows:
             rate = 15.0 if r["id"] in special else 13.0
             conn.execute("INSERT INTO commission_rates (country_id, rate) VALUES (?,?)", (r["id"], rate))
+    # 初始化税费：默认税率 0%、附加费 0 欧元
+    if conn.execute("SELECT COUNT(*) FROM tax_rates").fetchone()[0] == 0:
+        rows = conn.execute("SELECT id FROM countries").fetchall()
+        for r in rows:
+            conn.execute("INSERT INTO tax_rates (country_id, rate, fee) VALUES (?,0,0)", (r["id"],))
     conn.commit()
     conn.close()

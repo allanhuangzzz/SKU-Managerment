@@ -46,7 +46,7 @@ const Commissions = {
         <div class="form-item"><label>佣金率（%）<span class="req">*</span></label>
           <input class="input" type="number" step="0.1" min="0" max="99.9" id="c-rate" value="${row.rate}"></div>
       </div>
-      <div class="modal-note">该佣金率将用于产品运费明细中的盈亏平衡售价计算。<br>计算公式：盈亏平衡售价 = (进货价 + 国内运费 + 国外运费(RMB)) / (1 - 佣金率)</div>`;
+      <div class="modal-note">该佣金率将用于产品运费明细中的盈亏平衡售价计算。<br>计算公式：盈亏平衡售价 = (进货价 + 国内运费 + 货代费 + 国外运费(RMB) + 税费附加费) / (1 - 佣金率 - 税率/(1+税率))</div>`;
     const { box, close } = openModal({
       title: `修改佣金率（${esc(row.country_name)}）`,
       body,

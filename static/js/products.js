@@ -283,6 +283,7 @@ const Products = {
           <th class="ctr">盈亏平衡售价</th>
           <th class="ctr">预估国外运费</th>
           <th class="ctr">预估国外运费（RMB）</th>
+          <th class="ctr">税费</th>
           <th class="ctr">平台佣金</th>
           <th class="ctr">佣金率</th>
         </tr></thead>
@@ -300,7 +301,8 @@ const Products = {
           const localStr = money(sym, it.break_even_local);
           const costStr = money(sym, it.cost_original != null ? Number(it.cost_original) : null);
           const cnyStr = money("¥", it.cost_cny);
-          const commStr = money("¥", it.platform_commission);
+          const taxStr = money(sym, it.platform_tax);
+          const commStr = money(sym, it.platform_commission);
           const spVal = it.selling_price != null ? String(it.selling_price) : "";
           const rate = it.rate;
           const be = it.break_even_local;
@@ -333,6 +335,7 @@ const Products = {
             <td class="ctr"><b>${localStr}</b></td>
             <td class="ctr">${costStr}</td>
             <td class="ctr">${cnyStr}</td>
+            <td class="ctr">${taxStr}</td>
             <td class="ctr">${commStr}</td>
             <td class="ctr">${fmtNum(it.commission_rate)}%</td>
           </tr>`;
