@@ -74,6 +74,14 @@ body {
 }
 .ver-line { display: flex; align-items: center; justify-content: space-between; }
 .ver-line b { color: #b8c9db; font-weight: 600; font-family: ui-monospace, Consolas, monospace; }
+.ver-wrap { position: relative; display: inline-flex; align-items: center; }
+/* 有新版本时的小红点（版本号右上方） */
+.ver-dot {
+  position: absolute; top: -1px; right: -7px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #e5484d; cursor: pointer;
+  box-shadow: 0 0 0 2px var(--sidebar-bg);
+}
 .btn-update {
   display: inline-flex;
   align-items: center;
@@ -401,6 +409,20 @@ select.input { cursor: pointer; appearance: auto; }
   margin-top: 12px; padding: 10px 12px;
   font-size: 12.5px; line-height: 1.75; color: var(--text-secondary);
   background: #f6f9fc; border-radius: 6px;
+}
+
+/* ---------- 图片大图预览 ---------- */
+.product-thumb { cursor: zoom-in; }
+.img-lightbox {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(10, 26, 43, 0.82);
+  cursor: zoom-out;
+}
+.img-lightbox img {
+  max-width: 88vw; max-height: 88vh;
+  border-radius: 8px; background: #fff;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
 }
 
 /* ---------- 运费规则列表编辑器 ---------- */

@@ -60,6 +60,10 @@ const Products = {
     tbody.querySelectorAll(".product-row").forEach((tr) =>
       tr.addEventListener("click", (e) => {
         if (e.target.closest(".link-btn")) return;
+        if (e.target.closest(".product-thumb")) {   // 点击缩略图看大图
+          openImagePreview(e.target.getAttribute("src"));
+          return;
+        }
         this.toggleShipping(Number(tr.dataset.id));
       }));
     tbody.querySelectorAll("[data-edit]").forEach((b) =>
@@ -130,7 +134,8 @@ const Products = {
       this.bindSellingPriceEvents(productId, box);
     };
 
-    box.querySelectorAll("tbody tr").forEach((tr) => {
+    // 单行绑定（保存后局部刷新会重新绑定一次）
+    const bindRow = (tr) => {
       const priceInp = tr.querySelector('.editable-price[data-field="price"]');
       const profitInp = tr.querySelector('.editable-price[data-field="profit"]');
       const localBox = tr.querySelector(".profit-local");
@@ -171,7 +176,53 @@ const Products = {
           setLocalProfit(r2(price - be));
         });
       }
-    });
+
+      // 回车即提交（触发 change → 自动保存）；失焦后值有变化也自动保存
+      [priceInp, profitInp].forEach((inp) => {
+        if (!inp) return;
+        inp.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); inp.blur(); }
+        });
+        inp.addEventListener("change", () => autoSave());
+      });
+    };
+
+    box.querySelectorAll("tbody tr").forEach(bindRow);
+
+    // 自动保存：提交所有未保存的渠道，成功后局部刷新这些行（不重建整表，避免打断正在编辑的输入框）
+    async function autoSave() {
+      if (dirty.size === 0) return;
+      const { items, err } = collectItems();
+      if (err) { toast(err, "error"); return; }
+      const keys = new Set(items.map((it) => `${it.country_id}__${it.channel}`));
+      try {
+        await api(`/api/products/${productId}/selling-prices`, "PUT", { items });
+        keys.forEach((k) => dirty.delete(k));
+        updateDirty();
+        toast(items.length > 1 ? `已保存 ${items.length} 项修改` : "已保存", "success");
+        await refreshRows(keys);
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    }
+
+    // 局部刷新：按「国家+渠道」替换对应行并重新绑定事件
+    async function refreshRows(keys) {
+      const r = await api(`/api/products/${productId}/shipping`);
+      const items = r.items || [];
+      items.forEach((it, idx) => {
+        const key = `${it.country_id}__${it.channel}`;
+        if (!keys.has(key)) return;
+        const tr = Array.from(box.querySelectorAll("tbody tr")).find((t) => t.dataset.key === key);
+        if (!tr) return;
+        const prev = idx > 0 ? items[idx - 1] : null;
+        const holder = document.createElement("tbody");
+        holder.innerHTML = Products.rowHtml(it, !prev || prev.country_name !== it.country_name);
+        const newTr = holder.firstElementChild;
+        tr.replaceWith(newTr);
+        bindRow(newTr);
+      });
+    }
 
     // 收集所有脏行为待提交 items；返回 { items, err }
     const collectItems = () => {
@@ -193,18 +244,17 @@ const Products = {
       return { items, err };
     };
 
-    // 批量修改弹窗：统一设置 + 保存全部 + 重置
+    // 批量修改弹窗：填统一收益后直接「保存全部修改」即生效（无需先应用）
     if (openBtn) openBtn.addEventListener("click", () => {
       const m = openModal({
         title: "批量修改预估收益（RMB）",
         body: `
-          <div class="modal-note">将当前产品<b>所有可计算渠道</b>的预估收益（RMB）统一设为同一目标值；也可先在表格逐行修改后，再一起保存。</div>
+          <div class="modal-note">填写「统一目标收益」后点「保存全部修改」，会将该收益应用到<b>所有可计算渠道</b>并立即保存；留空则只保存表格中未保存的改动。</div>
           <div class="form-item">
             <label>统一目标收益（RMB）</label>
             <div class="batch-modal-row">
               <span class="price-sym">¥</span>
               <input class="input-sm batch-profit-input" placeholder="如 100，负数表示亏损" style="flex:1">
-              <button type="button" class="btn btn-sm batch-apply">应用到全部渠道</button>
             </div>
           </div>
           <div class="modal-note">当前 <b class="batch-count">${dirty.size}</b> 项待保存，保存后生效。</div>`,
@@ -216,13 +266,10 @@ const Products = {
       const refreshCount = () => { countEl.textContent = String(dirty.size); updateDirty(); };
 
       batchInp.addEventListener("input", () => filterNum(batchInp, { minus: true, maxInt: 6 }));
-      batchInp.addEventListener("keydown", (e) => { if (e.key === "Enter") mb.querySelector(".batch-apply").click(); });
+      batchInp.addEventListener("keydown", (e) => { if (e.key === "Enter") mb.querySelector(".batch-save").click(); });
 
-      // 统一应用到全部可联动渠道（逐行触发联动与脏标记）
-      mb.querySelector(".batch-apply").addEventListener("click", () => {
-        const raw = (batchInp.value || "").trim();
-        if (raw === "" || raw === "-" || isNaN(parseFloat(raw))) { toast("请输入目标收益金额", "error"); return; }
-        const val = String(r2(parseFloat(raw)));
+      // 把统一收益写入全部可联动渠道（逐行触发联动与脏标记）；返回生效渠道数
+      const applyToAll = (val) => {
         let n = 0;
         box.querySelectorAll("tbody tr").forEach((tr) => {
           const p = tr.querySelector('.editable-price[data-field="profit"]');
@@ -231,10 +278,8 @@ const Products = {
           p.dispatchEvent(new Event("input", { bubbles: true }));
           n++;
         });
-        if (n === 0) { toast("没有可应用的渠道（可能缺少汇率）", "error"); return; }
-        refreshCount();
-        toast(`已应用到 ${n} 个渠道`, "success");
-      });
+        return n;
+      };
 
       // 重置：放弃未保存修改
       mb.querySelector(".batch-reset").addEventListener("click", async () => {
@@ -242,8 +287,15 @@ const Products = {
         m.close();
       });
 
-      // 保存全部：一次批量提交
+      // 保存全部：有统一值则先应用到全部渠道，再一次性提交
       mb.querySelector(".batch-save").addEventListener("click", async () => {
+        const raw = (batchInp.value || "").trim();
+        if (raw !== "" && raw !== "-") {
+          if (isNaN(parseFloat(raw))) { toast("目标收益金额无效", "error"); return; }
+          const n = applyToAll(String(r2(parseFloat(raw))));
+          if (n === 0) { toast("没有可应用的渠道（可能缺少汇率）", "error"); return; }
+          refreshCount();
+        }
         if (dirty.size === 0) { toast("没有需要保存的修改"); m.close(); return; }
         const { items, err } = collectItems();
         if (err) { toast(err, "error"); return; }
@@ -289,59 +341,63 @@ const Products = {
         </tr></thead>
         <tbody>${items.map((it, idx) => {
           const prev = idx > 0 ? items[idx - 1] : null;
-          const isGroupStart = !prev || prev.country_name !== it.country_name;
-          const sym = it.currency_symbol || it.currency;
-          // 货币金额单元格：符号固定居左、数字右对齐（保证符号同列、数字位数对齐）
-          const money = (symbol, val, color) => {
-            if (val == null) return `<span class="money-cell money-neutral"><span class="money-sym"></span><span class="money-val">—</span></span>`;
-            const cls = color ? "" : " money-neutral";
-            const clr = color ? ` style="color:${color}"` : "";
-            return `<span class="money-cell${cls}"${clr}><span class="money-sym">${symbol}</span><span class="money-val">${fmtMoney(val)}</span></span>`;
-          };
-          const localStr = money(sym, it.break_even_local);
-          const costStr = money(sym, it.cost_original != null ? Number(it.cost_original) : null);
-          const cnyStr = money("¥", it.cost_cny);
-          const taxStr = money(sym, it.platform_tax);
-          const commStr = money(sym, it.platform_commission);
-          const spVal = it.selling_price != null ? String(it.selling_price) : "";
-          const rate = it.rate;
-          const be = it.break_even_local;
-          // 汇率/盈亏平衡价齐备时，售价与收益RMB才可双向联动
-          const linkable = rate != null && rate > 0 && be != null;
-          const profitRmbVal = it.estimated_profit_rmb != null ? String(it.estimated_profit_rmb) : "";
-          // 预估收益（当地币种）：随售价/收益RMB实时联动刷新
-          const profitLocalHtml = it.estimated_profit != null
-            ? money((it.estimated_profit >= 0 ? "+" : "") + sym, it.estimated_profit,
-                    it.estimated_profit >= 0 ? "var(--success)" : "var(--danger)")
-            : money(sym, null);
-          const dataAttrs = `data-country="${it.country_id}" data-channel="${esc(it.channel)}" data-rate="${rate ?? ""}" data-be="${be ?? ""}" data-sym="${esc(sym)}"`;
-          return `<tr class="${isGroupStart ? 'country-group' : ''}">
-            <td class="ctr">${esc(it.country_name)}（${esc(it.channel)}）</td>
-            <td class="ctr">
-              <span class="price-input-wrap">
-                <span class="price-sym">${sym}</span>
-                <input type="text" inputmode="decimal" class="editable-price" data-field="price" ${dataAttrs}
-                  value="${spVal}" placeholder="—">
-              </span>
-            </td>
-            <td class="ctr"><span class="profit-local">${profitLocalHtml}</span></td>
-            <td class="ctr">
-              <span class="price-input-wrap">
-                <span class="price-sym">¥</span>
-                <input type="text" inputmode="decimal" class="editable-price" data-field="profit" ${dataAttrs}
-                  value="${profitRmbVal}" placeholder="—"${linkable ? "" : " disabled"}>
-              </span>
-            </td>
-            <td class="ctr"><b>${localStr}</b></td>
-            <td class="ctr">${costStr}</td>
-            <td class="ctr">${cnyStr}</td>
-            <td class="ctr">${taxStr}</td>
-            <td class="ctr">${commStr}</td>
-            <td class="ctr">${fmtNum(it.commission_rate)}%</td>
-          </tr>`;
+          return this.rowHtml(it, !prev || prev.country_name !== it.country_name);
         }).join("")}
         </tbody>
       </table>`;
+  },
+
+  // 单行 HTML（整表渲染与保存后局部刷新共用）
+  rowHtml(it, isGroupStart) {
+    const sym = it.currency_symbol || it.currency;
+    // 货币金额单元格：符号固定居左、数字右对齐（保证符号同列、数字位数对齐）
+    const money = (symbol, val, color) => {
+      if (val == null) return `<span class="money-cell money-neutral"><span class="money-sym"></span><span class="money-val">—</span></span>`;
+      const cls = color ? "" : " money-neutral";
+      const clr = color ? ` style="color:${color}"` : "";
+      return `<span class="money-cell${cls}"${clr}><span class="money-sym">${symbol}</span><span class="money-val">${fmtMoney(val)}</span></span>`;
+    };
+    const localStr = money(sym, it.break_even_local);
+    const costStr = money(sym, it.cost_original != null ? Number(it.cost_original) : null);
+    const cnyStr = money("¥", it.cost_cny);
+    const taxStr = money(sym, it.platform_tax);
+    const commStr = money(sym, it.platform_commission);
+    const spVal = it.selling_price != null ? String(it.selling_price) : "";
+    const rate = it.rate;
+    const be = it.break_even_local;
+    // 汇率/盈亏平衡价齐备时，售价与收益RMB才可双向联动
+    const linkable = rate != null && rate > 0 && be != null;
+    const profitRmbVal = it.estimated_profit_rmb != null ? String(it.estimated_profit_rmb) : "";
+    // 预估收益（当地币种）：随售价/收益RMB实时联动刷新
+    const profitLocalHtml = it.estimated_profit != null
+      ? money((it.estimated_profit >= 0 ? "+" : "") + sym, it.estimated_profit,
+              it.estimated_profit >= 0 ? "var(--success)" : "var(--danger)")
+      : money(sym, null);
+    const dataAttrs = `data-country="${it.country_id}" data-channel="${esc(it.channel)}" data-rate="${rate ?? ""}" data-be="${be ?? ""}" data-sym="${esc(sym)}"`;
+    return `<tr class="${isGroupStart ? 'country-group' : ''}" data-key="${it.country_id}__${esc(it.channel)}">
+      <td class="ctr">${esc(it.country_name)}（${esc(it.channel)}）</td>
+      <td class="ctr">
+        <span class="price-input-wrap">
+          <span class="price-sym">${sym}</span>
+          <input type="text" inputmode="decimal" class="editable-price" data-field="price" ${dataAttrs}
+            value="${spVal}" placeholder="—">
+        </span>
+      </td>
+      <td class="ctr"><span class="profit-local">${profitLocalHtml}</span></td>
+      <td class="ctr">
+        <span class="price-input-wrap">
+          <span class="price-sym">¥</span>
+          <input type="text" inputmode="decimal" class="editable-price" data-field="profit" ${dataAttrs}
+            value="${profitRmbVal}" placeholder="—"${linkable ? "" : " disabled"}>
+        </span>
+      </td>
+      <td class="ctr"><b>${localStr}</b></td>
+      <td class="ctr">${costStr}</td>
+      <td class="ctr">${cnyStr}</td>
+      <td class="ctr">${taxStr}</td>
+      <td class="ctr">${commStr}</td>
+      <td class="ctr">${fmtNum(it.commission_rate)}%</td>
+    </tr>`;
   },
 
   openModal(id) {

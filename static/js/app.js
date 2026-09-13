@@ -125,22 +125,56 @@ async function ensureFreshRates(silent = true) {
 /* ---------- 系统更新（一键更新，交由 Watchtower 拉取并重建容器） ---------- */
 const SystemUpdate = {
   version: null,
+  source: "",
+  buildTime: "",
   running: false,
 
   short(v) { return String(v || "dev").slice(0, 7); },
+
+  versionTip() {
+    if (this.source === "build") {
+      const t = this.buildTime ? new Date(this.buildTime) : null;
+      const ts = t && !isNaN(t) ? t.toLocaleString("zh-CN", { hour12: false }) : "";
+      return `完整版本：${this.version}` + (ts ? `\n构建时间：${ts}` : "");
+    }
+    if (this.source === "local") {
+      return `完整版本：${this.version}\n本地运行，版本号取自当前代码提交`;
+    }
+    return "本地开发模式，无版本信息";
+  },
 
   async init() {
     const btn = $("#btn-system-update");
     let st = null;
     try { st = await api("/api/system/version"); } catch (e) { return; }
     this.version = st.version;
-    $("#ver-text").textContent = this.short(st.version);
+    this.source = st.version_source || "";
+    this.buildTime = st.build_time || "";
+    const vEl = $("#ver-text");
+    vEl.textContent = this.short(st.version);
+    vEl.title = this.versionTip();
     if (!st.update_enabled) {
       btn.title = "本地运行模式不支持一键更新，请在群晖 Container Manager 中更新";
+      this.checkUpdate();
       return;
     }
     btn.disabled = false;
     btn.addEventListener("click", () => this.run());
+    this.checkUpdate();
+  },
+
+  // 每次打开页面检查一次新版本，有则显示版本号右上方小红点
+  async checkUpdate() {
+    let r = null;
+    try { r = await api("/api/system/check-update"); } catch (e) { return; }
+    if (!r || !r.has_update) return;
+    const dot = $("#ver-dot");
+    const btn = $("#btn-system-update");
+    const tip = `有新版本 ${this.short(r.latest)}，点「一键更新」升级`;
+    dot.hidden = false;
+    dot.title = tip;
+    btn.title = btn.disabled ? `${tip}（当前为本地运行模式）` : tip;
+    dot.addEventListener("click", () => this.run());
   },
 
   async run() {
@@ -165,6 +199,7 @@ const SystemUpdate = {
     const finish = (html, cls) => {
       setStatus(html, cls);
       if (cls === "ok") {
+        $("#ver-dot").hidden = true;   // 已更新/已是最新，清除小红点
         reloadBtn.style.display = "";
         reloadBtn.addEventListener("click", () => location.reload());
       }
@@ -192,7 +227,10 @@ const SystemUpdate = {
       }
       if (st.version !== oldVer) {      // 版本已变化 → 更新成功
         this.version = st.version;
-        $("#ver-text").textContent = this.short(st.version);
+        this.buildTime = st.build_time || "";
+        const vEl = $("#ver-text");
+        vEl.textContent = this.short(st.version);
+        vEl.title = this.versionTip();
         finish(`更新完成：${this.short(oldVer)} → ${this.short(st.version)}`, "ok");
         return;
       }
@@ -209,6 +247,19 @@ const SystemUpdate = {
     finish("已是最新版本，无需更新。", "ok");
   },
 };
+
+/* ---------- 图片大图预览（点击缩略图打开，点任意处或 Esc 关闭） ---------- */
+function openImagePreview(src) {
+  if (!src) return;
+  const box = document.createElement("div");
+  box.className = "img-lightbox";
+  box.innerHTML = `<img src="${esc(src)}" alt="">`;
+  const close = () => { box.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  box.addEventListener("click", close);
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(box);
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   $$(".nav-item").forEach((n) => n.addEventListener("click", () => switchView(n.dataset.view)));

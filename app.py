@@ -2,6 +2,7 @@
 import json
 import os
 import sqlite3
+import subprocess
 import threading
 import time
 import urllib.request
@@ -776,10 +777,53 @@ def update_tax(cid):
 
 # ---------- 系统更新（由 Watchtower 执行拉取与重建） ----------
 
-APP_VERSION = os.environ.get("APP_VERSION", "dev")
+def _local_git_sha():
+    """未由 CI 注入版本时，回退读取当前工作副本的提交号（本地开发用）"""
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            stderr=subprocess.DEVNULL,
+        )
+        return out.decode("utf-8").strip()
+    except Exception:
+        return ""
+
+
+# 镜像由 CI 构建时注入真实提交号；本地直接运行则回退到工作副本提交号
+APP_VERSION = os.environ.get("APP_VERSION", "").strip()
+APP_VERSION_FROM_BUILD = bool(APP_VERSION) and APP_VERSION != "dev"
+if not APP_VERSION_FROM_BUILD:
+    APP_VERSION = _local_git_sha() or "dev"
+APP_BUILD_TIME = os.environ.get("APP_BUILD_TIME", "").strip()
 UPDATE_TRIGGER_URL = os.environ.get("UPDATE_TRIGGER_URL", "").strip()
 UPDATE_TRIGGER_TOKEN = os.environ.get("UPDATE_TRIGGER_TOKEN", "").strip()
+# 版本比对来源：仓库中 master 分支最近一次构建成功的提交
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "allanhuangzzz/SKU-Managerment")
+BUILD_WORKFLOW = os.environ.get("BUILD_WORKFLOW", "build-docker-image.yml")
 _update_state = {"running": False, "error": None}
+_latest_check = {"at": 0.0, "sha": None, "error": None}
+
+
+def _fetch_latest_sha():
+    """查询远端最新构建版本（结果缓存 5 分钟，失败不影响主流程）"""
+    if time.time() - _latest_check["at"] < 300:
+        return
+    url = ("https://api.github.com/repos/%s/actions/workflows/%s/runs"
+           "?branch=master&status=success&per_page=1" % (GITHUB_REPO, BUILD_WORKFLOW))
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "sku-manager",
+        "Accept": "application/vnd.github+json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8")) or {}
+        runs = data.get("workflow_runs") or []
+        _latest_check["sha"] = runs[0].get("head_sha") if runs else None
+        _latest_check["error"] = None
+    except Exception as e:
+        _latest_check["error"] = f"检查更新失败：{e}"
+    _latest_check["at"] = time.time()
 
 
 def _trigger_update():
@@ -802,8 +846,27 @@ def system_version():
     """当前代码版本；update_enabled 表示是否支持面板一键更新"""
     return jsonify({
         "version": APP_VERSION,
+        "build_time": APP_BUILD_TIME,
+        "version_source": "build" if APP_VERSION_FROM_BUILD else ("local" if APP_VERSION != "dev" else "dev"),
         "update_enabled": bool(UPDATE_TRIGGER_URL),
         "update_error": _update_state["error"],
+    })
+
+
+@app.get("/api/system/check-update")
+def system_check_update():
+    """检查是否有新版本（前端每次打开页面时调用，供版本号红点提示）"""
+    if not APP_VERSION_FROM_BUILD:
+        # 本地开发/镜像自带 dev：版本号非构建产物，与远端比对没有意义
+        return jsonify({"checked": False, "has_update": False, "reason": "当前非镜像构建版本，无需检查更新"})
+    _fetch_latest_sha()
+    latest = _latest_check["sha"]
+    return jsonify({
+        "checked": latest is not None,
+        "current": APP_VERSION,
+        "latest": latest,
+        "has_update": bool(latest and latest != APP_VERSION),
+        "error": _latest_check["error"],
     })
 
 
