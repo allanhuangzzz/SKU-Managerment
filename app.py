@@ -774,6 +774,51 @@ def update_tax(cid):
     return jsonify({"ok": True})
 
 
+# ---------- 系统更新（由 Watchtower 执行拉取与重建） ----------
+
+APP_VERSION = os.environ.get("APP_VERSION", "dev")
+UPDATE_TRIGGER_URL = os.environ.get("UPDATE_TRIGGER_URL", "").strip()
+UPDATE_TRIGGER_TOKEN = os.environ.get("UPDATE_TRIGGER_TOKEN", "").strip()
+_update_state = {"running": False, "error": None}
+
+
+def _trigger_update():
+    """后台触发 Watchtower：拉取与重建由它完成，本进程随后会被替换"""
+    try:
+        req = urllib.request.Request(UPDATE_TRIGGER_URL, method="POST")
+        if UPDATE_TRIGGER_TOKEN:
+            req.add_header("Authorization", f"Bearer {UPDATE_TRIGGER_TOKEN}")
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            resp.read()
+        _update_state["error"] = None
+    except Exception as e:
+        _update_state["error"] = f"触发更新失败：{e}"
+    finally:
+        _update_state["running"] = False
+
+
+@app.get("/api/system/version")
+def system_version():
+    """当前代码版本；update_enabled 表示是否支持面板一键更新"""
+    return jsonify({
+        "version": APP_VERSION,
+        "update_enabled": bool(UPDATE_TRIGGER_URL),
+        "update_error": _update_state["error"],
+    })
+
+
+@app.post("/api/system/update")
+def system_update():
+    """触发一键更新：后台线程请求 Watchtower，立即返回，由前端轮询更新结果"""
+    if not UPDATE_TRIGGER_URL:
+        return jsonify({"ok": False, "message": "当前为本地运行模式，未配置一键更新"}), 400
+    if _update_state["running"]:
+        return jsonify({"ok": True, "message": "更新已在进行中"})
+    _update_state.update(running=True, error=None)
+    threading.Thread(target=_trigger_update, daemon=True).start()
+    return jsonify({"ok": True, "version": APP_VERSION})
+
+
 # ---------- 启动 ----------
 
 def _startup_refresh():

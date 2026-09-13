@@ -1,11 +1,11 @@
-# 产品SKU管理系统 - Docker Compose（镜像流模式）
+# 产品SKU管理系统 - Docker Compose（镜像流模式 + 面板一键更新）
 # 代码由 GitHub Actions 自动构建并推送到 GHCR 与 Docker Hub；
-# 本文件只负责：拉取最新镜像 + 挂载 NAS 本地数据，不再本地构建。
+# 本文件负责：拉取最新镜像 + 挂载 NAS 本地数据 + 由 watchtower 执行面板"一键更新"。
 #
-# 用法：Container Manager 新增项目，路径选本目录（含 data/ 子目录与 data 数据）
+# 用法：Container Manager 新增项目，路径选本目录（含 data/ 子目录与数据）
 # 数据持久化：宿主机 ./data 目录（sku.db 数据库 + uploads 产品图），重建容器不丢数据
-# 更新方式：GitHub 代码有更新后，Container Manager 映像标签会出现"可用更新"，
-#           点更新（或 docker compose pull && up -d）即拉取新镜像重启
+# 更新方式：1) 面板左下角「一键更新」按钮（调用 watchtower 拉取并重建本容器）
+#           2) 群晖映像页点"更新"  3) SSH：docker compose pull && docker compose up -d
 
 services:
   sku:
@@ -17,6 +17,25 @@ services:
     environment:
       HOST: "0.0.0.0"
       PORT: "5050"
+      # 面板「一键更新」按钮：请求 watchtower 的 HTTP API
+      UPDATE_TRIGGER_URL: "http://watchtower:8080/v1/update"
+      UPDATE_TRIGGER_TOKEN: "${UPDATE_TOKEN:-sku-nas-update}"
     volumes:
       - ./data/sku.db:/app/sku.db              # 数据库持久化（文件级挂载）
       - ./data/uploads:/app/static/uploads     # 产品图片持久化（目录级挂载）
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"   # 允许被 watchtower 更新
+
+  # 更新执行器：不轮询、不主动做事，仅在被面板按钮调用时拉取新镜像并重建 sku 容器
+  watchtower:
+    image: docker.io/containrrr/watchtower:latest
+    container_name: sku-watchtower
+    restart: always
+    environment:
+      WATCHTOWER_HTTP_API_UPDATE: "true"      # 开启 HTTP API 触发模式（默认不启用定时轮询）
+      WATCHTOWER_HTTP_API_TOKEN: "${UPDATE_TOKEN:-sku-nas-update}"
+      WATCHTOWER_LABEL_ENABLE: "true"         # 只更新带 enable=true 标签的容器
+      WATCHTOWER_CLEANUP: "true"              # 更新后删除旧镜像，释放空间
+      TZ: "Asia/Shanghai"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock   # 执行更新所必需

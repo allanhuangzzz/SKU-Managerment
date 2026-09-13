@@ -122,7 +122,96 @@ async function ensureFreshRates(silent = true) {
   } catch (e) { /* 静默失败，不打扰用户 */ }
 }
 
+/* ---------- 系统更新（一键更新，交由 Watchtower 拉取并重建容器） ---------- */
+const SystemUpdate = {
+  version: null,
+  running: false,
+
+  short(v) { return String(v || "dev").slice(0, 7); },
+
+  async init() {
+    const btn = $("#btn-system-update");
+    let st = null;
+    try { st = await api("/api/system/version"); } catch (e) { return; }
+    this.version = st.version;
+    $("#ver-text").textContent = this.short(st.version);
+    if (!st.update_enabled) {
+      btn.title = "本地运行模式不支持一键更新，请在群晖 Container Manager 中更新";
+      return;
+    }
+    btn.disabled = false;
+    btn.addEventListener("click", () => this.run());
+  },
+
+  async run() {
+    if (this.running) return;
+    this.running = true;
+    const oldVer = this.version;
+    const { box } = openModal({
+      title: "系统更新",
+      body: `<div class="update-status" id="upd-status"><span class="spinner"></span>正在触发更新检查...</div>
+             <div class="update-tip">
+               更新流程：检查远端最新镜像 → 有新版本则拉取 → 重建容器并重启应用。<br>
+               若已是最新版本，服务不会重启，可继续正常使用；更新期间页面会短暂无法访问，属正常现象。
+             </div>`,
+      buttons: `<button class="btn btn-primary" id="upd-reload" style="display:none">刷新页面</button>`,
+    });
+    const status = box.querySelector("#upd-status");
+    const reloadBtn = box.querySelector("#upd-reload");
+    const setStatus = (html, cls = "") => {
+      status.className = "update-status " + cls;
+      status.innerHTML = html;
+    };
+    const finish = (html, cls) => {
+      setStatus(html, cls);
+      if (cls === "ok") {
+        reloadBtn.style.display = "";
+        reloadBtn.addEventListener("click", () => location.reload());
+      }
+      this.running = false;
+    };
+
+    try {
+      await api("/api/system/update", "POST");
+    } catch (e) {
+      finish(`更新触发失败：${esc(e.message)}`, "err");
+      return;
+    }
+
+    const deadline = Date.now() + 180000;
+    let restarted = false;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 2000));
+      let st = null;
+      try { st = await api("/api/system/version"); } catch (e) { st = null; }
+
+      if (!st) {                        // 服务暂时不可达 → 容器正在重建
+        restarted = true;
+        setStatus(`<span class="spinner"></span>应用正在重建重启，等待服务恢复...`);
+        continue;
+      }
+      if (st.version !== oldVer) {      // 版本已变化 → 更新成功
+        this.version = st.version;
+        $("#ver-text").textContent = this.short(st.version);
+        finish(`更新完成：${this.short(oldVer)} → ${this.short(st.version)}`, "ok");
+        return;
+      }
+      if (st.update_error) {            // 触发/拉取失败
+        finish(st.update_error, "err");
+        return;
+      }
+      if (restarted) {                  // 已重启但版本未变
+        finish(`已重建容器，版本仍为 ${this.short(oldVer)}`, "ok");
+        return;
+      }
+      setStatus(`<span class="spinner"></span>正在检查并拉取最新镜像（已等待 ${Math.round((180000 - (deadline - Date.now())) / 1000)} 秒）...`);
+    }
+    finish("已是最新版本，无需更新。", "ok");
+  },
+};
+
 document.addEventListener("DOMContentLoaded", () => {
   $$(".nav-item").forEach((n) => n.addEventListener("click", () => switchView(n.dataset.view)));
   switchView("products");
+  SystemUpdate.init();
 });

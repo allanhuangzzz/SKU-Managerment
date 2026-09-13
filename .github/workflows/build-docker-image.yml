@@ -40,6 +40,8 @@ jobs:
         with:
           context: .                            # 仓库根 = 唯一代码源
           file: ./deploy_nas/Dockerfile         # Dockerfile 位于 deploy_nas（COPY 相对根）
+          build-args: |
+            GIT_SHA=${{ github.sha }}           # 写入镜像，供面板显示版本与更新校验
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest

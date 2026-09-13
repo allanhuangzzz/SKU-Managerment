@@ -14,6 +14,10 @@ COPY templates ./templates
 COPY static/css ./static/css
 COPY static/js ./static/js
 
+# 版本号：CI 构建时注入提交 SHA（面板显示 + 更新校验用），本地构建默认 dev
+ARG GIT_SHA=dev
+ENV APP_VERSION=$GIT_SHA
+
 # 应用启动时会自动创建 static/uploads（os.makedirs exist_ok）
 ENV HOST=0.0.0.0 \
     PORT=5050 \

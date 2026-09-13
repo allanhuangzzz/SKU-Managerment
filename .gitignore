@@ -7,6 +7,9 @@ __pycache__/
 *.log
 debug.log
 
+# 本地/部署环境变量（如 UPDATE_TOKEN）
+.env
+
 # 数据文件（数据库 + 上传产品图）不入库
 *.db
 static/uploads/
