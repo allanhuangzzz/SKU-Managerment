@@ -82,7 +82,7 @@ const Products = {
       try {
         const r = await api(`/api/products/${id}/shipping`);
         box.dataset.loaded = "1";
-        box.innerHTML = this.shippingHtml(id, r.weight, r.items);
+        box.innerHTML = this.shippingHtml(id, r);
         // 绑定售价编辑
         this.bindSellingPriceEvents(id, box);
       } catch (e) {
@@ -130,7 +130,7 @@ const Products = {
     };
     const rerender = async () => {
       const r = await api(`/api/products/${productId}/shipping`);
-      box.innerHTML = this.shippingHtml(productId, r.weight, r.items);
+      box.innerHTML = this.shippingHtml(productId, r);
       this.bindSellingPriceEvents(productId, box);
     };
 
@@ -314,10 +314,21 @@ const Products = {
     });
   },
 
-  shippingHtml(productId, weight, items) {
-    const note = weight > 0
-      ? `按产品重量 ${fmtNum(weight)} kg，货物类型匹配`
-      : `产品重量为 0，请在编辑中设置重量后计算`;
+  shippingHtml(productId, info) {
+    const items = info.items || [];
+    // 计费重量说明：抛重 = 长×宽×高÷8000，泡比 = 抛重÷实重
+    const w = info.weight || 0;
+    let note;
+    if (w > 0) {
+      const vw = info.volume_weight || 0;
+      const ratio = info.weight_ratio == null ? 0 : info.weight_ratio;
+      const cw = info.chargeable_weight == null ? w : info.chargeable_weight;
+      const kg = (v) => Number(v).toFixed(2);
+      note = `实重 ${kg(w)} kg / 抛重 ${kg(vw)} kg / 泡比 ${kg(ratio)}，`
+        + `按${ratio >= 1.5 ? "抛重" : "实重"}计费，计费重量 ${kg(cw)} kg，货物类型匹配`;
+    } else {
+      note = `产品重量为 0，请在编辑中设置重量后计算`;
+    }
     if (!items.length) {
       return `<h4>各国运费明细（${note}）</h4>
         <div class="loading" style="padding:16px 0">暂无匹配的运费规则或该货物类型无对应规则，请先在「运费维护」中添加对应国家的规则</div>`;

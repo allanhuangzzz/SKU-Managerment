@@ -281,6 +281,16 @@ def product_shipping(pid):
     if product is None:
         return jsonify({"ok": False, "message": "产品不存在"}), 404
     weight = _num(product["weight"])
+    # 计费重量：先算抛重（体积重）= 长×宽×高÷8000，再与实重比较泡比
+    #   泡比 = 抛重 ÷ 实重；泡比 ≥ 1.5 取实重与抛重中较大者计费，泡比 < 1.5 直接按实重计费
+    length = _num(product["length"])
+    width = _num(product["width"])
+    height = _num(product["height"])
+    volume_weight = round(length * width * height / 8000, 4)
+    weight_ratio = round(volume_weight / weight, 4) if weight > 0 else None
+    chargeable_weight = (
+        max(weight, volume_weight) if weight_ratio is not None and weight_ratio >= 1.5 else weight
+    )
     cargo_type = product["cargo_type"] if "cargo_type" in product.keys() else "普货"
     purchase_price = _num(product["purchase_price"])
     domestic_shipping = _num(product["domestic_shipping"])
@@ -310,13 +320,13 @@ def product_shipping(pid):
 
     items = []
     for rule in rules:
-        # 档位区间采用左闭右开 [weight_min, weight_max)，
+        # 档位区间采用左闭右开 [weight_min, weight_max)，按【计费重量】判定：
         # 相邻档（如 0.3/0.5/1/2kg）在交界处不重叠，避免同一产品命中多档重复展示
-        if weight < rule["weight_min"]:
+        if chargeable_weight < rule["weight_min"]:
             continue
-        if rule["weight_max"] is not None and weight >= rule["weight_max"]:
+        if rule["weight_max"] is not None and chargeable_weight >= rule["weight_max"]:
             continue
-        cost_original = rule["per_parcel"] + rule["per_kg"] * weight
+        cost_original = rule["per_parcel"] + rule["per_kg"] * chargeable_weight
         rate = rates.get(rule["currency"])
         cost_cny = round(cost_original * rate, 2) if rate is not None else None
         comm_rate = (commissions.get(rule["country_id"]) or 0) / 100.0
@@ -397,7 +407,14 @@ def product_shipping(pid):
             item["estimated_profit"] = None
             item["estimated_profit_rmb"] = None
             # 无售价时，保留盈亏平衡售价对应的佣金（上方已计算）
-    return jsonify({"ok": True, "weight": weight, "items": items})
+    return jsonify({
+        "ok": True,
+        "weight": weight,
+        "volume_weight": volume_weight,
+        "weight_ratio": weight_ratio,
+        "chargeable_weight": chargeable_weight,
+        "items": items,
+    })
 
 
 # ---------- 国家（运费/汇率共用） ----------
