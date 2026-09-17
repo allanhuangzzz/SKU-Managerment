@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>产品SKU管理系统</title>
   <link rel="stylesheet" href="/static/css/style.css">
+  <script>
+    // 折叠状态在渲染前套用，避免侧栏闪现；手机端默认收起
+    try {
+      var _sb = localStorage.getItem("sku-sidebar");
+      if (_sb === "closed" || (_sb === null && window.innerWidth <= 768)) {
+        document.documentElement.classList.add("sidebar-collapsed");
+      }
+    } catch (e) {}
+  </script>
 </head>
 <body>
   <aside class="sidebar">
@@ -22,12 +31,21 @@
         <span class="ver-wrap"><b id="ver-text">—</b><i class="ver-dot" id="ver-dot" hidden></i></span>
       </div>
       <button class="btn-update" id="btn-system-update" disabled>一键更新</button>
+      {% if auth_enabled %}<a class="btn-logout" href="/logout">退出登录</a>{% endif %}
     </div>
   </aside>
+  <div class="sidebar-mask" id="sidebar-mask"></div>
 
   <main class="main">
     <header class="page-header">
-      <h1 class="page-title" id="page-title">产品信息</h1>
+      <div class="header-left">
+        <button class="sidebar-toggle" id="sidebar-toggle" title="折叠 / 展开功能栏" aria-label="折叠或展开功能栏">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <path d="M2 4h14M2 9h14M2 14h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <h1 class="page-title" id="page-title">产品信息</h1>
+      </div>
       <div class="toolbar" id="toolbar"></div>
     </header>
 

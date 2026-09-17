@@ -261,7 +261,28 @@ function openImagePreview(src) {
   document.body.appendChild(box);
 }
 
+/* ---------- 功能栏折叠（桌面收起侧栏；手机为遮罩抽屉） ---------- */
+const Sidebar = {
+  root: () => document.documentElement,
+
+  set(collapsed) {
+    this.root().classList.toggle("sidebar-collapsed", collapsed);
+    // 记住折叠状态，刷新后保持
+    try { localStorage.setItem("sku-sidebar", collapsed ? "closed" : "open"); } catch (e) { /* 隐私模式下忽略 */ }
+  },
+
+  init() {
+    $("#sidebar-toggle").addEventListener("click", () =>
+      this.set(!this.root().classList.contains("sidebar-collapsed")));
+    $("#sidebar-mask").addEventListener("click", () => this.set(true));
+    // 手机端：选中菜单后自动收起抽屉，避免遮挡内容
+    $$(".nav-item").forEach((n) =>
+      n.addEventListener("click", () => { if (window.innerWidth <= 768) this.set(true); }));
+  },
+};
+
 document.addEventListener("DOMContentLoaded", () => {
+  Sidebar.init();
   $$(".nav-item").forEach((n) => n.addEventListener("click", () => switchView(n.dataset.view)));
   switchView("products");
   SystemUpdate.init();

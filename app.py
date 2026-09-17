@@ -1,14 +1,17 @@
 """产品SKU管理系统 - Flask 后端"""
 import json
 import os
+import secrets
 import sqlite3
 import subprocess
 import threading
 import time
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import check_password_hash, generate_password_hash
 
 import db
 
@@ -34,6 +37,145 @@ CURRENCY_SYMBOLS = {
     "SEK": "kr", "NOK": "kr", "DKK": "kr", "MXN": "MX$",
     "BRL": "R$", "TWD": "NT$", "AED": "د.إ",
 }
+
+
+# ---------- 登录鉴权 ----------
+# AUTH_PASSWORD 为空 = 不启用登录（本地开发默认关闭）；NAS 上通过环境变量开启
+AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin").strip() or "admin"
+AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
+AUTH_ENABLED = bool(AUTH_PASSWORD)
+_AUTH_PASSWORD_HASH = generate_password_hash(AUTH_PASSWORD) if AUTH_ENABLED else ""
+
+# 会话签名密钥：未配置则每次启动随机生成（重启后需重新登录）
+_AUTH_SECRET = os.environ.get("AUTH_SECRET", "").strip() or secrets.token_hex(32)
+REMEMBER_DAYS = 30   # 勾选「记住我」后的免登录天数
+# 累计失败次数 → 锁定时长（分钟）：3 次锁 15 分钟，6 次锁 1 小时，9 次起锁 24 小时
+LOCK_TIERS = ((3, 15), (6, 60), (9, 24 * 60))
+
+app.secret_key = _AUTH_SECRET
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,     # 禁止 JS 读取会话 cookie
+    SESSION_COOKIE_SAMESITE="Lax",    # 阻断跨站携带会话的写操作
+    SESSION_COOKIE_SECURE=os.environ.get("AUTH_COOKIE_SECURE", "1") == "1",  # 仅在 HTTPS 下发送
+    PERMANENT_SESSION_LIFETIME=timedelta(days=REMEMBER_DAYS),
+)
+# 位于反向代理（群晖 / Cloudflare）之后，据此还原真实客户端 IP 与协议
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+
+
+def _lock_minutes(fails):
+    """累计失败次数对应的锁定时长（分钟），未达第一档返回 0"""
+    minutes = 0
+    for threshold, m in LOCK_TIERS:
+        if fails >= threshold:
+            minutes = m
+    return minutes
+
+
+def _locked_remaining(username):
+    """账号剩余锁定分钟数（0 表示未锁定）"""
+    row = db.get_db().execute(
+        "SELECT locked_until FROM login_attempts WHERE username=?", (username,)
+    ).fetchone()
+    if not row or not row["locked_until"]:
+        return 0
+    try:
+        until = datetime.strptime(row["locked_until"], "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return 0
+    secs = (until - datetime.now()).total_seconds()
+    return int(secs // 60) + 1 if secs > 0 else 0
+
+
+def _bump_login_fail(username):
+    """累加失败次数并写入锁定时间，返回 (累计失败次数, 本次锁定分钟数)"""
+    conn = db.get_db()
+    row = conn.execute(
+        "SELECT fails FROM login_attempts WHERE username=?", (username,)
+    ).fetchone()
+    fails = (row["fails"] if row else 0) + 1
+    minutes = _lock_minutes(fails)
+    locked_until = None
+    if minutes:
+        locked_until = (datetime.now() + timedelta(minutes=minutes)).strftime("%Y-%m-%d %H:%M:%S")
+    now = _now()
+    conn.execute(
+        """INSERT INTO login_attempts (username, fails, locked_until, updated_at)
+           VALUES (?,?,?,?)
+           ON CONFLICT(username) DO UPDATE SET fails=?, locked_until=?, updated_at=?""",
+        (username, fails, locked_until, now, fails, locked_until, now),
+    )
+    conn.commit()
+    return fails, minutes
+
+
+def _reset_login_fail(username):
+    """登录成功后清零失败计数"""
+    conn = db.get_db()
+    conn.execute("DELETE FROM login_attempts WHERE username=?", (username,))
+    conn.commit()
+
+
+def _safe_next(target):
+    """只接受站内相对路径，防止开放重定向"""
+    if target and target.startswith("/") and not target.startswith("//"):
+        return target
+    return "/"
+
+
+@app.before_request
+def _require_login():
+    """未登录时：页面跳登录页，接口返回 401；静态资源与登录相关路径放行"""
+    if not AUTH_ENABLED:
+        return None
+    path = request.path
+    if path.startswith("/static/") or path in ("/login", "/logout", "/favicon.ico"):
+        return None
+    if session.get("auth_user"):
+        return None
+    if path.startswith("/api/"):
+        return jsonify({"ok": False, "error": "登录已过期，请重新登录"}), 401
+    return redirect(url_for("login", next=path))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not AUTH_ENABLED:
+        return redirect("/")
+    error = None
+    username = ""
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        remember = request.form.get("remember") == "1"
+        remain = _locked_remaining(username)
+        if remain:
+            error = f"账号已锁定，请 {remain} 分钟后再试"
+        elif username == AUTH_USERNAME and check_password_hash(_AUTH_PASSWORD_HASH, password):
+            _reset_login_fail(username)
+            session.clear()
+            session["auth_user"] = username
+            session.permanent = remember
+            app.logger.info("登录成功 user=%s ip=%s", username, request.remote_addr)
+            return redirect(_safe_next(request.form.get("next") or request.args.get("next")))
+        else:
+            fails, minutes = _bump_login_fail(username or "-")
+            app.logger.warning(
+                "登录失败 user=%s ip=%s 累计失败=%s 次", username or "(空)", request.remote_addr, fails
+            )
+            if minutes:
+                error = f"密码错误，已累计失败 {fails} 次，账号锁定 {minutes} 分钟"
+            else:
+                error = f"账号或密码错误，再失败 {LOCK_TIERS[0][0] - fails} 次将锁定账号"
+    return render_template(
+        "login.html", error=error, username=username, next=_safe_next(request.args.get("next"))
+    )
+
+
+@app.get("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 # ---------- 工具函数 ----------
@@ -127,7 +269,7 @@ def _refresh_all_rates(dbconn, live_rates, source="auto"):
 
 @app.get("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", auth_enabled=AUTH_ENABLED, auth_user=session.get("auth_user"))
 
 
 # ---------- 产品信息 ----------

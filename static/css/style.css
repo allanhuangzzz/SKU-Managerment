@@ -36,7 +36,11 @@ body {
   display: flex;
   flex-direction: column;
   z-index: 10;
+  transition: transform .22s ease;
 }
+/* 折叠：整体收起，主区域占满宽度 */
+html.sidebar-collapsed .sidebar { transform: translateX(-100%); }
+.sidebar-mask { display: none; }
 .logo {
   padding: 22px 20px 18px;
   font-size: 16px;
@@ -100,18 +104,52 @@ body {
 }
 .btn-update:hover:not(:disabled) { background: var(--primary); border-color: var(--primary); color: #fff; }
 .btn-update:disabled { opacity: .5; cursor: not-allowed; }
+/* 退出登录：弱化的文字按钮（仅在开启鉴权时显示） */
+.btn-logout {
+  display: block;
+  width: 100%;
+  padding: 2px 0;
+  color: #8ea4bd;
+  font-size: 12px;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color .15s;
+}
+.btn-logout:hover { color: #dbe6f2; }
 
 /* ---------- 主区域 ---------- */
-.main { margin-left: 208px; padding: 22px 26px 40px; min-height: 100vh; }
+.main { margin-left: 208px; padding: 22px 26px 40px; min-height: 100vh; transition: margin-left .22s ease; }
+html.sidebar-collapsed .main { margin-left: 0; }
 
 .page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: nowrap;
   margin-bottom: 18px;
 }
-.page-title { font-size: 21px; font-weight: 600; color: var(--text); }
-.toolbar { display: flex; align-items: center; gap: 10px; }
+.header-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 auto; }
+.page-title {
+  font-size: 21px; font-weight: 600; color: var(--text);
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.toolbar { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; flex-wrap: nowrap; }
+
+/* 功能栏折叠按钮 */
+.sidebar-toggle {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--white);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.sidebar-toggle:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-light); }
 
 /* ---------- 按钮 ---------- */
 .btn {
@@ -498,3 +536,23 @@ select.input { cursor: pointer; appearance: auto; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #c8d2de; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #aab8c9; }
+
+/* ---------- 手机端适配（标题栏不换行 + 侧栏抽屉） ---------- */
+@media (max-width: 768px) {
+  .main { margin-left: 0; padding: 14px 14px 30px; }
+  /* 侧栏改为覆盖式抽屉，展开时不挤压内容 */
+  .sidebar { z-index: 100; box-shadow: 4px 0 20px rgba(6, 24, 43, .35); }
+  html:not(.sidebar-collapsed) .sidebar-mask {
+    display: block;
+    position: fixed; inset: 0; z-index: 90;
+    background: rgba(10, 26, 43, .45);
+  }
+  /* 标题栏：标题与按钮始终保持一行；说明文字隐藏，只留按钮 */
+  .page-header { gap: 8px; margin-bottom: 12px; }
+  .header-left { gap: 8px; }
+  .page-title { font-size: 17px; }
+  .sidebar-toggle { width: 32px; height: 32px; }
+  .toolbar { gap: 8px; }
+  .toolbar > span { display: none; }
+  .toolbar .btn { padding: 7px 12px; font-size: 13px; }
+}

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 - 产品SKU管理系统</title>
+  <style>
+    :root { --brand: #0b5cad; --brand-dark: #094a8b; --danger: #e5484d; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      background: linear-gradient(135deg, #eef4fa 0%, #dbe7f3 100%);
+      color: #1f2d3d;
+    }
+    .login-card {
+      width: 380px; padding: 34px 36px 26px;
+      background: #fff; border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(11, 92, 173, .14);
+    }
+    .login-logo { font-size: 20px; font-weight: 700; color: var(--brand); }
+    .login-sub { margin: 7px 0 22px; font-size: 13px; color: #7b8a9a; }
+    .error {
+      margin-bottom: 16px; padding: 10px 12px;
+      background: #fdf1f1; border: 1px solid #f5c7c9; border-radius: 7px;
+      color: var(--danger); font-size: 13px; line-height: 1.5;
+    }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; margin-bottom: 7px; font-size: 13px; color: #44546a; }
+    .field input {
+      width: 100%; height: 40px; padding: 0 12px;
+      border: 1px solid #d5dfe9; border-radius: 7px;
+      background: #fbfdff; color: #1f2d3d; font-size: 14px;
+      transition: border-color .15s, box-shadow .15s, background .15s;
+    }
+    .field input:focus {
+      outline: none; border-color: var(--brand); background: #fff;
+      box-shadow: 0 0 0 3px rgba(11, 92, 173, .12);
+    }
+    .remember { display: flex; align-items: center; gap: 7px; margin-bottom: 20px; font-size: 13px; color: #44546a; }
+    .remember input { width: 15px; height: 15px; accent-color: var(--brand); cursor: pointer; }
+    .remember label { cursor: pointer; }
+    .submit {
+      width: 100%; height: 42px; border: none; border-radius: 7px; cursor: pointer;
+      background: linear-gradient(180deg, var(--brand) 0%, var(--brand-dark) 100%);
+      color: #fff; font-size: 15px; font-weight: 600; letter-spacing: 3px;
+      transition: filter .15s;
+    }
+    .submit:hover { filter: brightness(1.08); }
+    .foot { margin-top: 18px; text-align: center; font-size: 12px; color: #9aa8b6; }
+  </style>
+</head>
+<body>
+  <form class="login-card" method="post" action="/login">
+    <div class="login-logo">SKU 管理系统</div>
+    <div class="login-sub">请输入账号密码后继续</div>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <div class="field">
+      <label for="username">账号</label>
+      <input type="text" id="username" name="username" value="{{ username }}"
+             autocomplete="username" autofocus required>
+    </div>
+    <div class="field">
+      <label for="password">密码</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
+    </div>
+    <div class="remember">
+      <input type="checkbox" id="remember" name="remember" value="1" checked>
+      <label for="remember">记住登录状态（30 天）</label>
+    </div>
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="submit" type="submit">登 录</button>
+    <div class="foot">连续输错 3 次将锁定账号，请勿反复尝试</div>
+  </form>
+</body>
+</html>

@@ -75,6 +75,14 @@ CREATE TABLE IF NOT EXISTS product_selling_prices (
     channel       TEXT NOT NULL,
     selling_price REAL,
     UNIQUE(product_id, country_id, channel)
+);
+
+-- 登录失败计数（落库，重启不清零，用于阶梯封禁）
+CREATE TABLE IF NOT EXISTS login_attempts (
+    username     TEXT PRIMARY KEY,
+    fails        INTEGER NOT NULL DEFAULT 0,
+    locked_until TEXT,
+    updated_at   TEXT
 );"""
 
 SEED_COUNTRIES = [

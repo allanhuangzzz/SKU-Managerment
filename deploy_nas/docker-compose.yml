@@ -13,10 +13,17 @@ services:
     container_name: sku-manager
     restart: always            # NAS 重启 / 容器异常退出后自动拉起
     ports:
-      - "5050:5050"            # 宿主机端口:容器端口；想换访问端口改左边即可
+      # 仅绑定本机回环：公网/局域网都打不到 5050，只能经群晖反向代理（HTTPS）进入。
+      # 全程 HTTPS 的对外访问方式见「部署说明.md → 外网访问（域名 + 端口）」。
+      - "127.0.0.1:5050:5050"
     environment:
       HOST: "0.0.0.0"
       PORT: "5050"
+      # 登录鉴权：AUTH_PASSWORD 留空 = 不启用登录（仅建议内网测试时）；对外访问务必设置强密码
+      AUTH_USERNAME: "${AUTH_USERNAME:-admin}"
+      AUTH_PASSWORD: "${AUTH_PASSWORD:-}"
+      AUTH_SECRET: "${AUTH_SECRET:-}"          # 会话签名密钥（随机长字符串）；留空则每次重启都需重新登录
+      AUTH_COOKIE_SECURE: "${AUTH_COOKIE_SECURE:-1}"   # 1=仅 HTTPS 发送会话 cookie；用 http 直连调试时改 0
       # 面板「一键更新」按钮：请求 watchtower 的 HTTP API
       UPDATE_TRIGGER_URL: "http://watchtower:8080/v1/update"
       UPDATE_TRIGGER_TOKEN: "${UPDATE_TOKEN:-sku-nas-update}"
